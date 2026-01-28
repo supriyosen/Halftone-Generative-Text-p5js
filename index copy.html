@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Halftone Text Generator</title>
+    <style>
+        /* --- CSS Reset & Variables --- */
+        :root {
+            --bg-color: #111111;
+            --panel-bg: rgba(30, 30, 30, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --text-color: #ffffff;
+            --accent-color: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --font-main: 'Inter', sans-serif;
+            --control-radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            outline: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- Layout --- */
+        #app {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* --- Canvas Area --- */
+        #canvas-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image:
+                radial-gradient(#222 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        canvas {
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            max-width: 90%;
+            max-height: 90%;
+            transition: transform 0.1s;
+        }
+
+        /* --- Controls Sidebar --- */
+        #controls {
+            width: 320px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-left: 1px solid var(--panel-border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+            /* Flex item properties */
+            height: 100%;
+            position: relative;
+            /* Changed from absolute */
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #fff, #999);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- Input Groups --- */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            font-weight: 600;
+        }
+
+        input[type="text"],
+        select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--panel-border);
+            color: white;
+            padding: 10px;
+            border-radius: var(--control-radius);
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            border-color: var(--accent-color);
+        }
+
+        /* --- Sliders --- */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            background: #444;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            transition: transform 0.1s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .value-display {
+            font-size: 0.75rem;
+            color: #aaa;
+            min-width: 30px;
+            text-align: right;
+            font-feature-settings: "tnum";
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* --- Color Picker --- */
+        .color-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 32px;
+            height: 32px;
+            background: none;
+            cursor: pointer;
+        }
+
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid var(--panel-border);
+            border-radius: 50%;
+        }
+
+        /* --- Button --- */
+        .btn-primary {
+            background: var(--text-color);
+            color: black;
+            border: none;
+            padding: 12px;
+            border-radius: var(--control-radius);
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        /* --- Loading --- */
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+    </style>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Playfair+Display:wght@700&family=Roboto+Mono:wght@500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <div class="loading-overlay" id="loader">
+        Initializing...
+    </div>
+
+    <div id="app">
+        <!-- Main Canvas -->
+        <div id="canvas-container">
+            <canvas id="outputCanvas"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <aside id="controls">
+            <div>
+                <h1>Halftone Gen</h1>
+                <p style="font-size: 0.8rem; color: #666;">Create dotted aesthetics.</p>
+            </div>
+
+            <div class="control-group">
+                <label>Text Content</label>
+                <input type="text" id="TextInput" value="H" placeholder="Enter text...">
+            </div>
+
+            <div class="control-group">
+                <label>Font Family</label>
+                <select id="FontFamily">
+                    <option value="'Inter', sans-serif">Inter (Sans)</option>
+                    <option value="'Playfair Display', serif">Playfair (Serif)</option>
+                    <option value="'Roboto Mono', monospace">Roboto Mono</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Font Size</label>
+                <div class="slider-container">
+                    <input type="range" id="FontSize" min="50" max="800" value="400">
+                    <span class="value-display" id="val-FontSize">400</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Font Weight</label>
+                <div class="slider-container">
+                    <input type="range" id="FontWeight" min="100" max="900" step="100" value="900">
+                    <span class="value-display" id="val-FontWeight">900</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Resolution (Grid Size)</label>
+                <div class="slider-container">
+                    <input type="range" id="GridSize" min="5" max="50" value="15">
+                    <span class="value-display" id="val-GridSize">15</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Dot Scale</label>
+                <div class="slider-container">
+                    <input type="range" id="DotScale" min="0.1" max="2.0" step="0.1" value="1.2">
+                    <span class="value-display" id="val-DotScale">1.2</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Threshold/Contrast</label>
+                <div class="slider-container">
+                    <input type="range" id="Threshold" min="0" max="255" value="200">
+                    <span class="value-display" id="val-Threshold">200</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="color-row">
+                    <label>Dot Color</label>
+                    <input type="color" id="DotColor" value="#ffffff">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="color-row">
+                    <label>Background</label>
+                    <input type="color" id="BgColor" value="#000000">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Animation Style</label>
+                <select id="AnimationType">
+                    <option value="none">None</option>
+                    <option value="wave">Wave</option>
+                    <option value="ripple">Ripple</option>
+                    <option value="breath">Breathing</option>
+                    <option value="noise">Noise</option>
+                    <option value="scanner">Scanner</option>
+                    <option value="rain">Rain</option>
+                    <option value="spiral">Spiral</option>
+                </select>
+            </div>
+
+            <div style="flex-grow: 1;"></div> <!-- Spacer -->
+
+            <div class="control-group" style="gap: 12px;">
+                <button class="btn-primary" id="DownloadBtn">Download Image</button>
+                <button class="btn-primary" id="DownloadVideoBtn"
+                    style="background: var(--accent-color); color: white;">Download Video (1080p)</button>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        /**
+         * Download Manager: Handles reliable file saving and recording
+         */
+        class DownloadManager {
+            constructor() {
+                this.isRecording = false;
+            }
+
+            saveBlob(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 1000); // Generous timeout for mobile/slow browsers
+            }
+
+            saveCanvasAsJPG(canvas, filename) {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        this.saveBlob(blob, filename);
+                    } else {
+                        alert('Error generating image');
+                    }
+                }, 'image/jpeg', 0.95);
+            }
+
+            async recordCanvas(sourceCanvas, durationMs, driverCallback) {
+                if (this.isRecording) return;
+                this.isRecording = true;
+
+                // Create a recording canvas (1080p fixed)
+                const recCanvas = document.createElement('canvas');
+                recCanvas.width = 1920;
+                recCanvas.height = 1080;
+                const recCtx = recCanvas.getContext('2d');
+
+                const stream = recCanvas.captureStream(30);
+
+                // Mime Type Selection (Prioritize MP4/H.264)
+                const types = [
+                    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                    'video/mp4',
+                    'video/webm;codecs=vp9',
+                    'video/webm'
+                ];
+                const mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+                console.log(`Using MIME type: ${mimeType}`);
+
+                let recorder;
+                try {
+                    recorder = new MediaRecorder(stream, {
+                        mimeType,
+                        videoBitsPerSecond: 8000000 // 8 Mbps
+                    });
+                } catch (e) {
+                    console.error("MediaRecorder init failed, trying default", e);
+                    recorder = new MediaRecorder(stream);
+                }
+
+                const chunks = [];
+                recorder.ondataavailable = e => {
+                    if (e.data.size > 0) chunks.push(e.data);
+                };
+
+                recorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: mimeType });
+                    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                    const filename = `halftone-animation-${Date.now()}.${ext}`;
+                    this.saveBlob(blob, filename);
+                    this.isRecording = false;
+                };
+
+                recorder.start();
+
+                // Animation Driver Loop
+                const fps = 30;
+                const totalFrames = (durationMs / 1000) * fps;
+                const intervalTime = 1000 / fps;
+                let frame = 0;
+
+                return new Promise((resolve) => {
+                    const timer = setInterval(() => {
+                        if (frame >= totalFrames) {
+                            clearInterval(timer);
+                            recorder.stop();
+                            resolve(mimeType);
+                            return;
+                        }
+
+                        const time = frame * intervalTime;
+                        // Ask the caller to render a frame at 'time' onto 'recCanvas'
+                        driverCallback(recCanvas, time);
+
+                        // Force stream update if needed (Chrome sometimes lazy with canvas stream)
+                        // Drawing to canvas triggers it.
+                        frame++;
+                    }, intervalTime);
+                });
+            }
+        }
+
+        /**
+         * Core Engine for Halftone Generation
+         */
+        class HalftoneEngine {
+            constructor(canvasOrId) {
+                if (typeof canvasOrId === 'string') {
+                    this.canvas = document.getElementById(canvasOrId);
+                } else {
+                    this.canvas = canvasOrId;
+                }
+                this.ctx = this.canvas.getContext('2d', { alpha: false });
+
+                // Offscreen canvas for text analysis
+                this.buffer = document.createElement('canvas');
+                this.bCtx = this.buffer.getContext('2d', { willReadFrequently: true });
+
+                this.state = {
+                    text: 'H',
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 400,
+                    fontWeight: 900,
+                    gridSize: 15,     // Size of one cell in px
+                    dotScale: 1.2,    // Multiplier for circle radius
+                    dotColor: '#ffffff',
+                    bgColor: '#000000',
+                    threshold: 200,   // Cutoff for empty space
+                    shape: 'circle',
+                    bgColor: '#000000',
+                    threshold: 200,   // Cutoff for empty space
+                    shape: 'circle',
+                    animationType: 'none'
+                };
+
+                this.isDirty = true;
+                this.startTime = 0;
+                this.animationFrameId = null;
+
+                this.fitToScreen();
+
+                window.addEventListener('resize', () => {
+                    this.fitToScreen();
+                    if (this.state.animationType === 'none') {
+                        this.render();
+                    }
+                });
+            }
+
+            setState(newState) {
+                const oldAnim = this.state.animationType;
+                this.state = { ...this.state, ...newState };
+                const newAnim = this.state.animationType;
+
+                const wasAnimating = oldAnim !== 'none';
+                const isAnimating = newAnim !== 'none';
+
+                if (isAnimating && !wasAnimating) {
+                    this.startAnimation();
+                } else if (!isAnimating && wasAnimating) {
+                    this.stopAnimation();
+                }
+
+                // If switching between animation types, we might want to reset start time or not
+                // keeping it simple for now.
+
+                if (!isAnimating) {
+                    this.isDirty = true;
+                    requestAnimationFrame(() => this.render());
+                }
+            }
+
+            startAnimation() {
+                if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+                this.startTime = performance.now();
+                this.loop();
+            }
+
+            stopAnimation() {
+                if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+                this.animationFrameId = null;
+                this.isDirty = true;
+                this.render(); // Final static render
+            }
+
+            loop(timestamp) {
+                if (this.state.animationType === 'none') return;
+
+                this.render(timestamp);
+                this.animationFrameId = requestAnimationFrame((t) => this.loop(t));
+            }
+
+            fitToScreen() {
+                // If it's the main canvas (has a parent), fit to parent.
+                // If it's an offscreen/detached canvas (for video), don't resize.
+                if (this.canvas.parentElement) {
+                    const container = this.canvas.parentElement;
+                    this.canvas.width = container.clientWidth;
+                    this.canvas.height = container.clientHeight;
+                }
+
+                // Buffer should match or be a sensible size for text rendering
+                this.buffer.width = this.canvas.width;
+                this.buffer.height = this.canvas.height;
+            }
+
+            render(timestamp) {
+                const isAnimating = this.state.animationType !== 'none';
+                if (!this.isDirty && !isAnimating) return;
+
+                const time = isAnimating && timestamp ? (timestamp - this.startTime) / 1000 : 0;
+
+                // 1. Clear Stage
+                this.ctx.fillStyle = this.state.bgColor;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // 2. Render Text to Buffer
+                this.bCtx.fillStyle = '#000'; // Background for buffer (switched logic: white text on black, easier to measure brightness)
+                this.bCtx.fillStyle = 'white'; // Let's try: White background, Black text. 
+                // Wait, standard halftone: Darker area = larger dot. 
+                // So let's render text as Black on White background.
+                this.bCtx.fillStyle = '#ffffff';
+                this.bCtx.fillRect(0, 0, this.buffer.width, this.buffer.height);
+
+                this.bCtx.fillStyle = '#000000';
+                this.bCtx.textAlign = 'center';
+                this.bCtx.textBaseline = 'middle';
+                this.bCtx.font = `${this.state.fontWeight} ${this.state.fontSize}px ${this.state.fontFamily}`;
+                this.bCtx.fillText(this.state.text, this.buffer.width / 2, this.buffer.height / 2);
+
+                // 3. Sample Grid
+                const { width, height } = this.canvas;
+                const gridSize = parseInt(this.state.gridSize);
+                const cols = Math.ceil(width / gridSize);
+                const rows = Math.ceil(height / gridSize);
+
+                const imgData = this.bCtx.getImageData(0, 0, width, height).data;
+
+                this.ctx.fillStyle = this.state.dotColor;
+
+                for (let y = 0; y < rows; y++) {
+                    for (let x = 0; x < cols; x++) {
+                        // Calculate sampled position (center of grid cell)
+                        const px = x * gridSize;
+                        const py = y * gridSize;
+
+                        // Sample brightness at the center of the cell
+                        // Or calculate average brightness? Average is smoother.
+
+                        let totalBrightness = 0;
+                        let count = 0;
+
+                        // Sampling Step: Check a few points in the cell for better accuracy than just 1 pixel
+                        // Simplified: Center pixel for performance on large canvases, or small block avg
+                        const sampleW = Math.min(gridSize, 2);
+                        const cx = Math.floor(px + gridSize / 2);
+                        const cy = Math.floor(py + gridSize / 2);
+
+                        if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+                            const i = (cy * width + cx) * 4;
+                            // Brightness = (R+G+B)/3. Text is Black (0), BG is White (255)
+                            // So low value = Text = Big Dot
+                            const brightness = (imgData[i] + imgData[i + 1] + imgData[i + 2]) / 3;
+
+                            // Invert: 255 (white) -> 0, 0 (black) -> 1
+                            const darkness = 1 - (brightness / 255);
+
+                            if (darkness > 0.05) { // Optimization: don't draw tiny dots
+                                // Animation Logic
+                                let animScale = 1.0;
+                                const anim = this.state.animationType;
+
+                                if (anim !== 'none') {
+                                    if (anim === 'wave') {
+                                        const freq = 0.05;
+                                        const speed = 2.0;
+                                        const wave = Math.sin(time * speed + (px * freq) + (py * freq));
+                                        animScale = 1.0 + (wave * 0.3);
+                                    }
+                                    else if (anim === 'ripple') {
+                                        const cx = width / 2;
+                                        const cy = height / 2;
+                                        const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+                                        const freq = 0.02;
+                                        const speed = 4.0;
+                                        const ripple = Math.sin(time * speed - dist * freq);
+                                        animScale = 1.0 + (ripple * 0.4);
+                                    }
+                                    else if (anim === 'breath') {
+                                        const speed = 1.5;
+                                        const breath = Math.sin(time * speed);
+                                        animScale = 1.0 + (breath * 0.3);
+                                    }
+                                    else if (anim === 'noise') {
+                                        // Pseudo-random based on position and time
+                                        const speed = 5.0; // Fast changes
+                                        // Simple noise hack: sin(huge_number)
+                                        const seed = (px * 12.9898 + py * 78.233) + time * speed;
+                                        const noise = Math.sin(seed * 43758.5453);
+                                        // Map [-1, 1] -> [0.7, 1.3]
+                                        animScale = 1.0 + (noise * 0.3);
+                                    }
+                                    else if (anim === 'scanner') {
+                                        const speed = 2.0;    // Speed of the scan
+                                        const barWidth = 100; // Width of the scanner bar
+                                        // Position of the bar center over time
+                                        const pos = (time * speed * 200) % (width + barWidth * 2) - barWidth;
+                                        // Distance of this pixel from the bar center
+                                        const dist = Math.abs(px - pos);
+
+                                        // Create a smooth bell curve or sharp notch?
+                                        if (dist < barWidth) {
+                                            // 0 at edge, 1 at center
+                                            const intensity = 1 - (dist / barWidth);
+                                            // Scale up significantly
+                                            animScale = 1.0 + (intensity * 1.5);
+                                        }
+                                    }
+                                    else if (anim === 'rain') {
+                                        const speed = 400;
+                                        // Each column has a different offset
+                                        const colOffset = px * 34.32;
+                                        const yPos = (py + time * speed + colOffset) % height;
+
+                                        // Make a "drop" shape: bright at top, trailing off
+                                        // Let's do simple sine drops
+                                        const drop = Math.sin((py - time * speed * 0.5) * 0.05 + Math.sin(px * 0.05) * 5);
+                                        animScale = 1.0 + (drop * 0.3);
+                                    }
+                                    else if (anim === 'spiral') {
+                                        const cx = width / 2;
+                                        const cy = height / 2;
+                                        const angle = Math.atan2(py - cy, px - cx);
+                                        const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+                                        const speed = 3.0;
+                                        const spiral = Math.sin(angle * 5 + time * speed - dist * 0.01);
+                                        animScale = 1.0 + (spiral * 0.4);
+                                    }
+                                }
+
+                                this.drawDot(px + gridSize / 2, py + gridSize / 2, gridSize, darkness * animScale);
+                            }
+                        }
+                    }
+                }
+
+                this.isDirty = false;
+            }
+
+            drawDot(x, y, cellSize, darkness) {
+                // Determine radius based on darkness
+                // scale factor allows dots to overlap/be huge
+                const maxRadius = (cellSize / 2) * this.state.dotScale;
+                const radius = maxRadius * darkness;
+
+                // Threshold clipping for crisp shapes if desired
+                // if (darkness * 255 < this.state.threshold) return; 
+
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        }
+
+        /* --- UI Initialization --- */
+        document.addEventListener('DOMContentLoaded', () => {
+            const engine = new HalftoneEngine('outputCanvas');
+            const downloader = new DownloadManager();
+
+            // Remove loader
+            setTimeout(() => {
+                document.getElementById('loader').style.opacity = '0';
+                setTimeout(() => document.getElementById('loader').remove(), 500);
+            }, 500);
+
+            // Bind Inputs
+            const bind = (id, key, type = 'value') => {
+                const el = document.getElementById(id);
+                const display = document.getElementById('val-' + id);
+
+                const update = () => {
+                    let val = el.value;
+                    if (type === 'number') val = parseFloat(val);
+
+                    if (display) display.textContent = val;
+                    engine.setState({ [key]: val });
+                };
+
+                el.addEventListener('input', update);
+            };
+
+            bind('TextInput', 'text');
+            bind('FontFamily', 'fontFamily');
+            bind('FontSize', 'fontSize', 'number');
+            bind('FontWeight', 'fontWeight', 'number');
+            bind('GridSize', 'gridSize', 'number');
+            bind('DotScale', 'dotScale', 'number');
+
+            document.getElementById('DotColor').addEventListener('input', (e) => {
+                engine.setState({ dotColor: e.target.value });
+            });
+
+            document.getElementById('BgColor').addEventListener('input', (e) => {
+                engine.setState({ bgColor: e.target.value });
+            });
+
+            document.getElementById('AnimationType').addEventListener('change', (e) => {
+                engine.setState({ animationType: e.target.value });
+            });
+
+            // Handlers using DownloadManager
+            document.getElementById('DownloadBtn').addEventListener('click', () => {
+                downloader.saveCanvasAsJPG(engine.canvas, `halftone-text-${Date.now()}.jpg`);
+            });
+
+            document.getElementById('DownloadVideoBtn').addEventListener('click', async () => {
+                const btn = document.getElementById('DownloadVideoBtn');
+                const originalText = btn.textContent;
+                btn.textContent = "Rendering Video...";
+                btn.disabled = true;
+
+                // Create a temporary parallel engine for rendering frames
+                let renderEngine = null;
+
+                const driver = (targetCanvas, time) => {
+                    // Initialize render engine on first frame if needed
+                    if (!renderEngine || renderEngine.canvas !== targetCanvas) {
+                        renderEngine = new HalftoneEngine(targetCanvas);
+                        // Copy state
+                        renderEngine.setState({
+                            ...engine.state,
+                            isAnimating: true // force animation mode
+                        });
+                        renderEngine.startTime = 0; // Reset time reference
+                    }
+
+                    // Render specific time
+                    renderEngine.isDirty = true;
+                    renderEngine.render(time);
+                };
+
+                await downloader.recordCanvas(null, 5000, driver);
+
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+
+            // Initial render
+            setTimeout(() => engine.setState({}), 100);
+        });
+
+    </script>
+</body>
+
+</html>
